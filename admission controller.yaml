@@ -1,0 +1,99 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spot-admission-controller
+  namespace: kube-system
+  labels:
+    name: spot-admission-controller
+spec:
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: 8080
+  selector:
+    name: spot-admission-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spot-admission-controller
+  namespace: kube-system
+  labels:
+    name: spot-admission-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      name: spot-admission-controller
+  template:
+    metadata:
+      name: spot-admission-controller
+      labels:
+        name: spot-admission-controller
+    spec:
+      containers:
+        - name: webhook
+          image: gcr.io/spotinst-artifacts/spot-ocean-admission-controller:0.1.2
+          imagePullPolicy: Always
+          command: []
+          args:
+            - --certFile=/etc/certs/cert.pem
+            - --keyFile=/etc/certs/key.pem
+          resources:
+            limits:
+              memory: 50Mi
+              cpu: 300m
+            requests:
+              memory: 00Mi
+              cpu: 300m
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/certs
+              readOnly: true
+            - name: logs
+              mountPath: /tmp
+          securityContext:
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: spot-admission-controller
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: "spot-admission-controller.kube-system.svc"
+webhooks:
+  - name: "spot-admission-controller.kube-system.svc"
+    namespaceSelector:
+      matchLabels:
+        spot.io/inject-aks-spot-toleration: "true"
+    rules:
+      - apiGroups:   [""]
+        apiVersions: ["v1"]
+        operations:  ["CREATE"]
+        resources:   ["pods"]
+        scope:       "Namespaced"
+    clientConfig:
+      service:
+        namespace: "kube-system"
+        name: "spot-admission-controller"
+        path: "/add-taints"
+      caBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURURENDQWpTZ0F3SUJBZ0lVS2hYTGw4VjVoVU4vc0FhV2tUbnlaL1dubVF3d0RRWUpLb1pJaHZjTkFRRUwKQlFBd1BqRUxNQWtHQTFVRUJoTUNTVXd4RURBT0JnTlZCQWdUQjBWNFlXMXdiR1V4RURBT0JnTlZCQW9UQjBWNApZVzF3YkdVeEN6QUpCZ05WQkFzVEFrTkJNQjRYRFRJek1EVXlNakE1TlRVd01Gb1hEVEk0TURVeU1EQTVOVFV3Ck1Gb3dQakVMTUFrR0ExVUVCaE1DU1V3eEVEQU9CZ05WQkFnVEIwVjRZVzF3YkdVeEVEQU9CZ05WQkFvVEIwVjQKWVcxd2JHVXhDekFKQmdOVkJBc1RBa05CTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQwpBUUVBeDNqSDRSZEhQd3RabnpEZktUMGFKZkFDb0hXZjhQY0lVNmZFYUkyLzF4S0FHZGprUmJWZGhjczZWWXo0ClFSZlVOZ2FxWHZ3ejByTWpneFB0QVZjSTVQMUZuZFlQZDNhNXg1UVR4K0tUUjQ5MXhlWllMQXhPeVJIendMVkQKVWV0eDZPUytieklpVWFlRHNMbXVodDY0cE0xejhaOWlHMG83a0wwUmlDcjJsblhoZ3RneExOMzFkOHFMVmtRVQo2eFBEZ1g0NTE0WTV1VGQ4SThLZzVpN2tqTGh5TGs2YzVjUDVVNkxHRXFQeWZtZVpDbm9xRlVDSk92UU43aVRHCkFvSU0rMU9WVjYxbDBXRURVaWFERTdmUlZqenJock5ZTjhkd3V5VzMxTzZBY2d0bnNUay93Y1BTTWtRaHUvckEKVDR5bXZxSXcrMVRkeWlSaUZMYVlwa3JUOVFJREFRQUJvMEl3UURBT0JnTlZIUThCQWY4RUJBTUNBUVl3RHdZRApWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVWRDQXFBdWpvZkJLSkFNQ0NaWVMwVGFPZ2diMHdEUVlKCktvWklodmNOQVFFTEJRQURnZ0VCQUUzZHd6RG9xTXlJSFJTWUd1eS9IWE81d2t3Yk1BZ215dWxaRXNqMSthNXEKQzhITDM5Tk5nQXJ1YUE5NEY5cXhGMHoyZzBMUUhKQ1JSLzc1MDR5MStKblR2djhmYjVqSjArN0VFL21IdG1rWAprYzVLTHVlT0JXWjNOTzVHZ1BJbEFZZ3lJNU5ydm5zV3dBN2dNNjVKYVhSVTkxT21hUUhMSHRnN3JYK3JKb2x1ClpJRTNNUTlCZkJ1c0RPR21WZlVHUUE5bW9qRk1zcFVpSDBCWXFxS1dVYTAwWTUrMFhXaGVONmtTNDgwWXJqdWMKWTlzTE5rVHNaSlpGbDhIMjVzMkhMWTI0YnA0Z2pqL055d0daQUNMcWhtZXczWXIrZ25XWW1VdWlHbTJqUngrVgpjUmxZV05KR3V2ZWxicFJNckIwOVNKZDhOa0JUSUlGUEc4czhiNUpoYmxVPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 5
+    failurePolicy: Ignore
+---
+apiVersion: v1
+data:
+  cert.pem: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUVDRENDQXZDZ0F3SUJBZ0lVRzJFcmVDN3BmY0E5dXRsRngwbUpxbnl6S0g4d0RRWUpLb1pJaHZjTkFRRUwKQlFBd1BqRUxNQWtHQTFVRUJoTUNTVXd4RURBT0JnTlZCQWdUQjBWNFlXMXdiR1V4RURBT0JnTlZCQW9UQjBWNApZVzF3YkdVeEN6QUpCZ05WQkFzVEFrTkJNQjRYRFRJek1EVXlNakE1TlRVd01Gb1hEVFF6TURVeE56QTVOVFV3Ck1Gb3dQakVMTUFrR0ExVUVCaE1DU1V3eEVEQU9CZ05WQkFnVEIwVjRZVzF3YkdVeEVEQU9CZ05WQkFvVEIwVjQKWVcxd2JHVXhDekFKQmdOVkJBc1RBa05CTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQwpBUUVBMU9ZOUtzazdCWnNMRitRbTdjOHdRRHUyUjB6eDYrdUgzZGlqdmpyYXdYN04vUlNPWlJqdGlBbnV3elMwCmpBa3h3amFCcjZ3bTRZVDBZdUpYN0ZiL0lIRUJER1JaaGdIdFVTdHhybUg2Y1NQcUhtNFM5Zlh3LzhVeEV4SUEKdTMyaHd2TVo4MlprL3JxMzRwMVhpTHpXYU12U3YzcTlxVWZIUENMVXlMWHEyQituNTVsTUo0NkJXd1ZkQnJpbwpPb3V3dDBYY1g2YkQ2NlgzcVRRTXpYZnZ6RElVOXRmK0o1bDkxSy9rMjUrWUpTSHhmNWhqMjlnUHZTOFpJKzB3Cm5VSTdIM2hnRkNHNVo2NVRGTi96VjEvczc5KzE3ZE5JQ2ZrL29lNjJJV1dWR2tlUVo4M3pEaytSaHhKM1o0djkKTndKMWxWV09QNFFRRk1heVYrQklIUE5KelFJREFRQUJvNEg5TUlINk1BNEdBMVVkRHdFQi93UUVBd0lGb0RBZApCZ05WSFNVRUZqQVVCZ2dyQmdFRkJRY0RBUVlJS3dZQkJRVUhBd0l3REFZRFZSMFRBUUgvQkFJd0FEQWRCZ05WCkhRNEVGZ1FVMWE1YWMyT05pbDIvTm5ib282RFF6MHN5RXdnd2dac0dBMVVkRVFTQmt6Q0JrSUlaYzNCdmRDMWgKWkcxcGMzTnBiMjR0WTI5dWRISnZiR3hsY29JM2MzQnZkQzFoWkcxcGMzTnBiMjR0WTI5dWRISnZiR3hsY2k1cgpkV0psTFhONWMzUmxiUzV6ZG1NdVkyeDFjM1JsY2k1c2IyTmhiSUlwYzNCdmRDMWhaRzFwYzNOcGIyNHRZMjl1CmRISnZiR3hsY2k1cmRXSmxMWE41YzNSbGJTNXpkbU9DQ1d4dlkyRnNhRzl6ZEljRWZ3QUFBVEFOQmdrcWhraUcKOXcwQkFRc0ZBQU9DQVFFQWQwSE5UNU9DbGc1NjcrQzA4RlFXZGZ5Vy9VMjFwMTgvN1pUMWR5UzBOMWpRYkZySgpoNnUwRGI5alpJVysrcWZCdTF2ZCtpOGN1WGtWYkhPREY3N01sVDRocVMyUVVFMGNna1crVEFGbTRmaVhVZ3U3CnRDUEp0YUNySnF6dU5VSlNUd0pLOE9pTFBmUVArT25xYjBUWjZJdnhneGZFMXBvQnBZcVNlTndaU2ZPejUwVUEKS01ybTUzQWFsbWlOK25pYmw1Nmo2MVE2dCszWjQvamp0cUZJUW8rYU1pZzNWNGJZMmJCMFZCOXBNbWVEWHBwWgpLSWlkK3VCbmRzVEJFNzFHWnZaL0EyZndMc3hQK1ZHdWxrS01hK0ZzTnU3VE1YSGpwdHJTTDdxM0xxaEhBU1pFCkdQS1l4K0FYck1mYldVeng5OUFzK1JwVVFnM2E3cSthcWlHUk53PT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
+  key.pem: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb2dJQkFBS0NBUUVBMU9ZOUtzazdCWnNMRitRbTdjOHdRRHUyUjB6eDYrdUgzZGlqdmpyYXdYN04vUlNPClpSanRpQW51d3pTMGpBa3h3amFCcjZ3bTRZVDBZdUpYN0ZiL0lIRUJER1JaaGdIdFVTdHhybUg2Y1NQcUhtNFMKOWZYdy84VXhFeElBdTMyaHd2TVo4MlprL3JxMzRwMVhpTHpXYU12U3YzcTlxVWZIUENMVXlMWHEyQituNTVsTQpKNDZCV3dWZEJyaW9Pb3V3dDBYY1g2YkQ2NlgzcVRRTXpYZnZ6RElVOXRmK0o1bDkxSy9rMjUrWUpTSHhmNWhqCjI5Z1B2UzhaSSswd25VSTdIM2hnRkNHNVo2NVRGTi96VjEvczc5KzE3ZE5JQ2ZrL29lNjJJV1dWR2tlUVo4M3oKRGsrUmh4SjNaNHY5TndKMWxWV09QNFFRRk1heVYrQklIUE5KelFJREFRQUJBb0lCQVFDb3hrVWpVQmQ4SUNjeApMMnMxQnhUbk51OFBvdzM5eXVBUW5KZGlUT0h5bHdYUlphUmt2TmhCQ2k2L2pWNjd6T1luWW5KNHcyNm5SWEUvCm10Tzh4bExHY3c4enRiSEtyR2huK3ByS2RWM0dwNFFIejVjMGFWNCtSU0xjVFY5TFF4TWpxdmlkbmtUZU0wTm4KWVBodHE5WUZpZDl1Y0cwK2IycWdYN1J6ME5OMXRHQmlOeUVYdU1vTTJLV2xJOFpiV044UW54ZGVCODhIV3lhcQo4Q1p5VkZBbFRTZjh1bVNlYjRRdE53ZndVSnFET3dNaDZRZXg5VWFpTWRIbTQ0V1d5YVFkWEVSUzc0SUhDVG5TCitpYnp2b2J2Tk9NZ3I5Mk85VTU3WVF5Z2NJSkdJeVU4bFE5aldSeTI5Qk4rcXhmVXVXUWNSMlErV2RQM0w2L0sKcTV6OFhFQjVBb0dCQU9KakdRenQ4ay9UY1hMOHZuaFhDeEw2WmpiOU40dTFkZUZ4aUN1NU03elBTRnQ2ci9DSQpudG93LzZ1aWp1ZUF6SDNkT01OWXQwWC9IaUxRL1kxU1RYOHhwYzZsc0R4MUZLNUJwUWd6Q3dCQlJzMVJBQkYrCkpadzhibjRqb0NLdHlZa3VnS212ZTNpVGMwUFhYVVEyR3pjdUZ1SkVVNm1SQWcvMjZyMENVZnFmQW9HQkFQQy8KZkJuNnNueC9WZTg3eVdOaWZIbWZSMWJMMWh2c0piV2hJbHVHQ1lMVmdiMU1wTzF3MW4rV01Pd21zL0VWY01TQwpOMTh0N1l5MnZlb3JYeUl1dnNzL2xpWkE5c0szcS9XMmdObGF1U3kvOW1Qck9idHFWZW1lY2RJYXN4ZjdnbEZ6CnV0OTN6Rnh2L3c2N1hSamtiN2hDcW4zSzdlMkMrTGpxUXBtdDlGQVRBb0dCQU5YT2I4ODFQdDlETytjMGFwTHUKNmllUFUwL2wwRHJqTXlTcSs4Y0hqNlJuUTlnWncrWndzVTR5YnBUajN3RW5OSG8rbnlobk5oZ21mSWkzUm0vYwo1aElWaXBuakE5SGxaWlc1cTZwVndyTUg4MTFmZmFnSHNtK2U1MSs4TjdYbzJlajBnVkZBeVdTMEpXMVNEZVNwCkVRVUpRMVdJNEZiSis5K2wvRVpyMVk3VEFvR0FkWE9sOHZLNHd6NUlTWGVzajUwTHh6WXEwckNOVzRBQkFiU0UKRTR5MzlTbCtxMERLTWNEY0ZORE1PMW5DYmZxYzBuSUkyNW1IakIvWFZYZ2xhSUxQdUU3a1RQTmlyNnAxN1dGRgpTVVVXbER0dTFGNTlBdThrek4zcy82amcrUEZPS2JqQlVhYWJmL2x2d05zdDF5Z1RUUnpSR3ArM0ppbkFlRTVwCmdabzVXQnNDZng3TG1kQ0RqSVJnN1A5SjRwQ2ZDeVVaRUhvNWg5MHd5RWxIeXhkZmFxT3hJb1lBOXFqY2xKQ1EKOVJ0SDViaWEwVmN3MFVnOEJRNEFwMzFSUmNHVVkvSjFVVU9UUFVSNzJmbjdwK215VzlPWkFxU0p4WGRTS0VydQpzQ3VyVXZ5ZndCMmgxajFlRVZDVzVqSnlDcjIzNlY4RXlaS2l0YmUzL3VpeXNsQ0ZFbEk9Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
+kind: Secret
+metadata:
+  name: spot-admission-controller
+  namespace: kube-system
+type: Opaque
