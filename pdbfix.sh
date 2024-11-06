@@ -11,7 +11,8 @@ else
   echo "PDB '$PDB_NAME' found in namespace '$NAMESPACE'. Deleting..."
 
 # Delete the PDB
-kubectl delete pdb $PDB_NAME -n $NAMESPACE
+kubectl delete pdb $PDB_NAME -n "$NAMESPACE"
+fi
 
 # Create new PDB in
 cat <<EOF | kubectl create -f -
@@ -26,5 +27,12 @@ spec:
     matchLabels:
       app.kubernetes.io/name: spot-admission-controller
 EOF
+
+# Check if minAvailable is set to 1
+MIN_AVAILABLE=$(kubectl get pdb $PDB_NAME -n kube-system -o jsonpath="{.spec.minAvailable}")
+if [ "$MIN_AVAILABLE" -eq 1 ]; then
+  echo "Verification successful: minAvailable is set to 1."
+else
+  echo "Verification failed: minAvailable is not set to 1."
 
 fi
