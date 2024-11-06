@@ -1,5 +1,5 @@
 # Define the PDB name you're searching for
-PDB_NAME="spot-admission"
+PDB_NAME="spot-admission-controller-pdb"
 
 # Find the namespace containing the PDB
 NAMESPACE=$(kubectl get pdb --all-namespaces -o jsonpath="{.items[?(@.metadata.name=='$PDB_NAME')].metadata.namespace}")
